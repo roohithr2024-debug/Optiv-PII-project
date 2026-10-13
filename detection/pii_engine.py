@@ -16,6 +16,7 @@ from models.schemas import (
 from detection.regex_detector import RegexDetector
 from detection.ner_detector import NERDetector
 from detection.context_rules import ContextDetector
+from detection.xgboost_detector import XGBoostPIICorroborator
 from utils.helpers import mask_sensitive_value
 
 logger = logging.getLogger(__name__)
@@ -35,6 +36,7 @@ class PIIEngine:
         self.regex_detector = RegexDetector()
         self.ner_detector = NERDetector(model_name=spacy_model)
         self.context_detector = ContextDetector()
+        self.ml_corroborator = XGBoostPIICorroborator()
 
     def detect_in_block(self, block: DocumentBlock) -> List[PIIFinding]:
         """Run all detectors on a single DocumentBlock and merge overlapping results."""
@@ -75,6 +77,8 @@ class PIIEngine:
 
         # Merge overlapping findings
         merged = self._merge_findings(raw_findings, block.text)
+        for finding in merged:
+            self.ml_corroborator.corroborate(finding)
         return merged
 
     def detect_blocks(self, blocks: List[DocumentBlock]) -> List[PIIFinding]:

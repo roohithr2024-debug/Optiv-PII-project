@@ -6,6 +6,7 @@ Provides deterministic, explainable, and fail-closed privacy controls
 for unstructured business documents prior to LLM context ingestion.
 """
 import io
+import json
 import time
 from pathlib import Path
 from typing import List, Dict, Optional, Tuple, Any
@@ -25,6 +26,18 @@ from models.schemas import (
 from pipeline import GatewayPipeline
 from reporting.report_generator import ReportGenerator
 from utils.helpers import calculate_file_hash
+
+ML_METRICS_PATH = Path(__file__).resolve().parent / "models" / "artifacts" / "xgboost_ml_metrics.json"
+
+
+def load_ml_metrics() -> Optional[Dict[str, Any]]:
+    """Load the standalone XGBoost evaluation report when it is available."""
+    if not ML_METRICS_PATH.exists():
+        return None
+    try:
+        return json.loads(ML_METRICS_PATH.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return None
 
 # ------------------------------------------------------------------------------
 # 1. PAGE CONFIGURATION & VIBRANT WHITE DESIGN SYSTEM
@@ -1281,7 +1294,7 @@ else:
             unsafe_allow_html=True,
         )
 
-        tab_findings, tab_risk, tab_sanitized, tab_validation, tab_traceability, tab_blocks, tab_exports = st.tabs([
+        tab_findings, tab_risk, tab_sanitized, tab_validation, tab_traceability, tab_blocks, tab_exports, tab_ml_metrics = st.tabs([
             "🔍 PII Findings Log",
             "⚖️ Intelligent Risk Assessment",
             "📄 Sanitized Output & Surrogate Registry",
@@ -1289,6 +1302,7 @@ else:
             "🧭 Structural Traceability Matrix",
             "📑 Raw Extracted Blocks",
             "📋 Compliance Export (JSON/CSV)",
+            "📈 ML Metrics",
         ])
 
         # TAB 1: PII FINDINGS LOG & TRIAGE
@@ -1534,5 +1548,53 @@ else:
                     data=csv_data,
                     file_name="pii_findings_traceability_matrix.csv",
                     mime="text/csv",
+                    use_container_width=True,
+                )
+
+        # TAB 8: STANDALONE ML METRICS
+        with tab_ml_metrics:
+            ml_metrics = load_ml_metrics()
+            st.markdown(
+                "<div style='font-size: 13px; font-weight: 700; color: #0F172A; margin-bottom: 8px;'>XGBoost PII Classification Metrics</div>",
+                unsafe_allow_html=True,
+            )
+            if not ml_metrics:
+                st.info("ML metrics are unavailable. Train the optional XGBoost model to generate the metrics file.")
+            else:
+                report = ml_metrics.get("testing_report", {})
+                overall = report.get("weighted avg", {})
+                metric_cols = st.columns(4)
+                metric_values = [
+                    ("Accuracy", report.get("accuracy", 0.0)),
+                    ("Precision", overall.get("precision", 0.0)),
+                    ("Recall", overall.get("recall", 0.0)),
+                    ("F1 Score", overall.get("f1-score", 0.0)),
+                ]
+                for col, (label, value) in zip(metric_cols, metric_values):
+                    with col:
+                        st.metric(label, f"{float(value) * 100:.1f}%")
+
+                class_rows = []
+                for label, values in report.items():
+                    if isinstance(values, dict) and "precision" in values:
+                        class_rows.append({
+                            "Class": label,
+                            "Precision": f"{values['precision'] * 100:.1f}%",
+                            "Recall": f"{values['recall'] * 100:.1f}%",
+                            "F1 Score": f"{values['f1-score'] * 100:.1f}%",
+                            "Test Support": int(values.get("support", 0)),
+                        })
+                if class_rows:
+                    st.dataframe(pd.DataFrame(class_rows), use_container_width=True, hide_index=True)
+                st.caption(
+                    f"Training examples: {ml_metrics.get('training_examples', 'N/A')} | "
+                    f"Classes: {len(ml_metrics.get('classes', []))}. "
+                    "Metrics are specific to the supplied annotated dataset."
+                )
+                st.download_button(
+                    label="⬇ Download ML Metrics (JSON)",
+                    data=json.dumps(ml_metrics, indent=2),
+                    file_name="xgboost_ml_metrics.json",
+                    mime="application/json",
                     use_container_width=True,
                 )

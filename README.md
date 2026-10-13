@@ -317,6 +317,31 @@ post-redaction residual findings, validation status, and structure retention.
 Confidence scores are detector heuristics and must not be presented as
 statistically validated accuracy.
 
+### 10.12 Optional XGBoost Corroboration Module
+
+The project includes an offline XGBoost text-classification module trained from
+the supplied Excel annotations. It acts as a corroboration layer for findings
+already produced by the existing regex, context, and NER detectors; it does not
+replace those detectors or change the frontend workflow.
+
+To retrain the local artifact:
+
+```bash
+python utils/train_xgboost.py ^
+  --training-set "C:\path\Training_Set.xlsx" ^
+  --testing-set "C:\path\Testing_Set.xlsx"
+```
+
+The generated artifact is stored at
+`models/artifacts/xgboost_pii_classifier.joblib`. When that artifact is absent
+or cannot be loaded, the gateway continues with its original detection
+behavior. When it is available and agrees with an existing finding, the
+finding records `XGBOOST` as an additional detection method.
+
+The supplied testing workbook produced a 1.00 precision, recall, and F1 report
+on 287 extracted test examples. This result is specific to the supplied
+synthetic/test distribution and is not a claim of real-world accuracy.
+
 ### Recommended Demonstration Flow
 
 For a project presentation, demonstrate the following sequence:
