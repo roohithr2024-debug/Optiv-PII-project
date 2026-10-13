@@ -338,9 +338,25 @@ or cannot be loaded, the gateway continues with its original detection
 behavior. When it is available and agrees with an existing finding, the
 finding records `XGBOOST` as an additional detection method.
 
-The supplied testing workbook produced a 1.00 precision, recall, and F1 report
-on 287 extracted test examples. This result is specific to the supplied
-synthetic/test distribution and is not a claim of real-world accuracy.
+The supplied testing workbook produced the following span-classification report:
+
+| Metric | Result |
+| :--- | :--- |
+| Accuracy | 100.0% |
+| Weighted precision | 100.0% |
+| Weighted recall | 100.0% |
+| Weighted F1 | 100.0% |
+| Extracted test examples | 287 |
+
+The per-class report is saved separately at
+`models/artifacts/xgboost_ml_metrics.json` and is displayed in the dashboard's
+**ML Metrics** tab. These results are specific to the supplied annotated
+synthetic/test distribution. They are not a claim of 100% real-world accuracy:
+the evaluation classifies extracted entity spans rather than complete
+documents, and generated data can contain highly regular patterns. A later
+overlap audit found 30 exact annotated span values shared between the training
+and testing annotations, so this score must be presented as a dataset-specific
+benchmark.
 
 ### Recommended Demonstration Flow
 
@@ -373,7 +389,10 @@ pii-security-gateway/
 │
 ├── models/
 │   ├── __init__.py
-│   └── schemas.py             # Common data model (DocumentBlock, PIIFinding, etc.)
+│   ├── schemas.py             # Common data model (DocumentBlock, PIIFinding, etc.)
+│   └── artifacts/
+│       ├── xgboost_pii_classifier.joblib  # Trained local XGBoost artifact
+│       └── xgboost_ml_metrics.json       # Standalone evaluation report
 │
 ├── extractors/
 │   ├── __init__.py            # File format dispatcher
@@ -387,7 +406,8 @@ pii-security-gateway/
 │   ├── regex_detector.py      # Deterministic regex patterns
 │   ├── ner_detector.py        # spaCy NER engine
 │   ├── context_rules.py       # Context-driven keyword rules
-│   └── pii_engine.py          # Hybrid orchestrator and overlap resolver
+│   ├── pii_engine.py          # Hybrid orchestrator and overlap resolver
+│   └── xgboost_detector.py    # Optional ML corroboration layer
 │
 ├── redaction/
 │   ├── __init__.py
@@ -402,7 +422,8 @@ pii-security-gateway/
 ├── utils/
 │   ├── __init__.py
 │   ├── helpers.py             # Luhn validator, masking, IP validation, hashing
-│   └── generate_samples.py    # Synthetic business evidence generator
+│   ├── generate_samples.py    # Synthetic business evidence generator
+│   └── train_xgboost.py       # Train model and generate ML metrics JSON
 │
 ├── tests/
 │   ├── __init__.py
@@ -444,6 +465,21 @@ python -m spacy download en_core_web_sm
 python utils/generate_samples.py
 ```
 
+### 5. (Optional) Train the XGBoost Corroboration Module
+
+The repository includes the trained artifact and metrics report. To retrain
+from the provided Excel files:
+
+```bash
+python utils/train_xgboost.py ^
+  --training-set "C:\path\Training_Set.xlsx" ^
+  --testing-set "C:\path\Testing_Set.xlsx"
+```
+
+This writes the model and metrics report to `models/artifacts/`. The XGBoost
+layer is optional at runtime; if its artifact is unavailable, the original
+regex, context, and NER pipeline continues to operate.
+
 ---
 
 ## 13. Running the Application
@@ -462,7 +498,7 @@ The application will launch locally at `http://localhost:8501`.
    - **Overview Cards:** Real-time metrics for Documents Analyzed, Total PII Detected, High-Risk Findings, Files Sanitized, and Files Blocked.
    - **PII Breakdown:** Distribution across categories (PERSON, EMAIL, PHONE, EMPLOYEE_ID, etc.) and risk severity.
    - **Findings & Action Log:** Traceability table displaying severity, confidence, detection method, file, location, and masked entities.
-   - **Document Deep-Dive:** Interactive tabs for inspecting Sanitized Output, Traceability Matrix, Validation Audit, and Original Extracted Blocks.
+   - **Document Deep-Dive:** Interactive tabs for inspecting Sanitized Output, Traceability Matrix, Validation Audit, Original Extracted Blocks, and the standalone **ML Metrics** report.
 4. **Export Deliverables:**
    - Download sanitized text output (`.txt`).
    - Export comprehensive forensic audit report (`.json`).
@@ -477,7 +513,7 @@ Run the complete test suite using `pytest`:
 pytest -v
 ```
 
-All 20 tests verify:
+The test suite verifies:
 - PDF extraction and page block retention
 - Scanned PDF detection and OCR flagging
 - DOCX headings, paragraphs, and tables extraction
@@ -501,6 +537,8 @@ All 20 tests verify:
 - **OCR Engine:** V1 detects scanned PDF pages (`SCANNED_PAGE_REQUIRES_OCR`) and supports Tesseract when installed locally on the host system PATH. If Tesseract is not installed, it safely flags the page as requiring review without crashing.
 - **Output Re-formatting:** V1 exports sanitized content as structured text retaining original structural headers, page labels, and slide sections. Direct re-compilation into native styled PDF/DOCX binary templates is planned for V2.
 - **Ground Truth Metrics:** To maintain strict scientific honesty, benchmark precision/recall scores require ground-truth annotations and display *"Metrics unavailable — ground truth not provided"* when unannotated documents are uploaded.
+- **XGBoost Benchmark Scope:** The current 100% XGBoost result is an entity-span classification result on the supplied annotated dataset, not an end-to-end document detection or redaction score. The test workbook is small and synthetic, and the data-generation process can produce regular patterns and overlap with training values. Independent real-world annotations are required for a reliable generalization estimate.
+- **spaCy Model Availability:** If `en_core_web_sm` is not installed, the application safely continues with regex and context detection, but NER-specific tests and person-name coverage may be reduced. Install the model during setup for the full hybrid detector.
 
 ---
 
