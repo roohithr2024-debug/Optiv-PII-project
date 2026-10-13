@@ -1,5 +1,6 @@
 """PDF Document Extractor using PyMuPDF (fitz) with OCR architecture."""
 import logging
+import shutil
 from typing import List, Tuple
 from pathlib import Path
 import pymupdf as fitz
@@ -15,8 +16,19 @@ try:
     import pytesseract
     from PIL import Image
     import io
-    # Test if tesseract executable exists
+    # Test PATH first, then standard Windows installation locations. This
+    # keeps OCR working when Streamlit was started before Tesseract was added
+    # to the user's PATH.
     try:
+        tesseract_candidates = [
+            shutil.which("tesseract"),
+            r"C:\Program Files\Tesseract-OCR\tesseract.exe",
+            r"C:\Program Files (x86)\Tesseract-OCR\tesseract.exe",
+        ]
+        for candidate in tesseract_candidates:
+            if candidate and Path(candidate).exists():
+                pytesseract.pytesseract.tesseract_cmd = candidate
+                break
         pytesseract.get_tesseract_version()
         TESSERACT_AVAILABLE = True
     except Exception:

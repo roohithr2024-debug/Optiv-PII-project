@@ -444,6 +444,7 @@ pii-security-gateway/
 ### Prerequisites
 - Python 3.11 or higher
 - Windows / macOS / Linux
+- Tesseract OCR for scanned PDF text extraction
 
 ### 1. Clone or Navigate to Project
 ```bash
@@ -460,12 +461,29 @@ pip install -r requirements.txt
 python -m spacy download en_core_web_sm
 ```
 
-### 4. (Optional) Generate Fresh Sample Evidence Documents
+### 4. Install Tesseract OCR (required for scanned PDFs)
+
+On Windows, install the Tesseract OCR engine from the UB Mannheim
+distribution, then restart the terminal or Streamlit process:
+
+```text
+https://github.com/UB-Mannheim/tesseract/wiki
+```
+
+The extractor also checks the standard Windows installation paths
+`C:\Program Files\Tesseract-OCR\tesseract.exe` and
+`C:\Program Files (x86)\Tesseract-OCR\tesseract.exe`, so a PATH refresh is
+not required when Tesseract is installed in its default location.
+
+On macOS or Linux, install the `tesseract` system package using the platform's
+package manager.
+
+### 5. (Optional) Generate Fresh Sample Evidence Documents
 ```bash
 python utils/generate_samples.py
 ```
 
-### 5. (Optional) Train the XGBoost Corroboration Module
+### 6. (Optional) Train the XGBoost Corroboration Module
 
 The repository includes the trained artifact and metrics report. To retrain
 from the provided Excel files:
