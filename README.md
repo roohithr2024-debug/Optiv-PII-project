@@ -157,7 +157,182 @@ The application uses an internal risk severity classification:
 
 ---
 
-## 10. Project Structure
+## 10. Novel Contributions and Presentation Highlights
+
+The project combines established detection techniques into a security-focused,
+explainable, and fail-closed pre-LLM pipeline. The following capabilities are
+the main novel contributions to highlight during a presentation.
+
+### 10.1 Pre-LLM Privacy Enforcement
+
+The gateway inspects and sanitizes evidence **before** it is submitted to a
+downstream AI or LLM service. This changes the security question from
+*"Can the model be trusted with raw data?"* to *"Has the data been proven safe
+before model ingestion?"*
+
+The system operates locally and does not require external AI or cloud APIs,
+keeping raw documents inside the organization's trust perimeter.
+
+### 10.2 Hybrid and Context-Aware PII Detection
+
+PII detection combines:
+
+- Deterministic regex detection for structured values such as emails, phones,
+  payment cards, IP addresses, government IDs, and employee IDs.
+- spaCy NER for person entities.
+- Business-context rules for labels such as `Employee ID`, `Contact`,
+  `Date of Birth`, `Passport`, `Government ID`, `Phone`, and `Address`.
+
+This allows the system to use both the value itself and its surrounding
+business context. A value that is ambiguous in isolation can become
+high-confidence PII when it follows an explicit evidence label.
+
+### 10.3 Cross-Detector Corroboration
+
+When multiple detectors identify the same entity, the hybrid engine merges the
+overlapping findings instead of reporting duplicates. It retains the detection
+methods and boosts confidence when independent signals agree.
+
+Every finding is therefore explainable through its:
+
+- PII type
+- Severity
+- Confidence score
+- Detection methods
+- Document location
+- Masked value
+- Human-readable explanation
+
+### 10.4 Semantic and Identity-Consistent Redaction
+
+Instead of replacing every value with a generic `[REDACTED]` token, the
+redaction engine generates semantic placeholders such as:
+
+```text
+[PERSON_001]
+[EMAIL_001]
+[PHONE_001]
+[EMPLOYEE_ID_001]
+```
+
+Repeated occurrences of the same entity receive the same placeholder across
+the document. This removes the sensitive value while preserving relationships
+for downstream reasoning, for example:
+
+```text
+[PERSON_001] contacted [PERSON_002] using [EMAIL_001].
+```
+
+The internal value-to-placeholder mapping is kept in the local processing
+session and is not transmitted to an external service.
+
+### 10.5 Independent Post-Redaction Verification
+
+The sanitizer is never trusted without a second scan. The security workflow is:
+
+```text
+Extract -> Detect -> Assess Risk -> Redact -> Re-scan -> Validate -> Release or Block
+```
+
+If actionable PII remains after redaction, the document is marked `BLOCKED`.
+This protects against missed detections, incorrect replacement offsets, partial
+redactions, and implementation errors.
+
+### 10.6 Fail-Closed Security Decisions
+
+The gateway treats uncertainty as unsafe. Empty files, corrupt files,
+extraction failures, detection failures, redaction failures, and residual PII
+cannot silently pass through the pipeline.
+
+Each document receives an actionable verdict:
+
+- `SANITIZED`: zero detectable PII remains after validation.
+- `BLOCKED`: actionable PII remains or a security-stage failure occurred.
+- `REVIEW_REQUIRED`: manual review is needed, such as for unreadable scanned
+  content or low-confidence residual signals.
+
+### 10.7 Structure-Preserving Multi-Format Processing
+
+The extractors support PDF, DOCX, PPTX, and TXT evidence while preserving
+provenance such as pages, slides, paragraphs, tables, sections, and block
+locations. This provides traceability that would be lost by flattening every
+document into an unstructured text string.
+
+The system also detects scanned PDF pages with insufficient extractable text
+and flags them for OCR or review. It does not interpret "no extracted text" as
+"no PII".
+
+### 10.8 Explainable Document Risk Scoring
+
+The risk classifier evaluates more than the raw number of findings. It
+considers:
+
+- Sensitivity of detected categories
+- Presence of government IDs or payment cards
+- Number of distinct entities
+- Number of distinct PII categories
+- Correlation between multiple personal attributes
+
+It produces an explainable score from 0 to 100, a risk tier
+(`LOW`, `MODERATE`, `HIGH`, or `CRITICAL`), risk factors, and a recommended
+action.
+
+### 10.9 False-Positive Reduction
+
+The detection layer validates candidates instead of accepting every pattern
+match. Examples include:
+
+- Luhn checksum validation for credit-card candidates.
+- Digit and format checks for employee and government IDs.
+- Realistic length and repetition checks for phone numbers.
+- Filtering technical terms and document labels from person-name candidates.
+- Ignoring generated placeholders during subsequent scans.
+
+These safeguards reduce the risk of redacting harmless technical, numerical,
+or structural content.
+
+### 10.10 Audit-Ready Outputs
+
+The dashboard produces sanitized text, JSON forensic reports, and CSV
+traceability matrices. These outputs support security review, compliance
+evidence, incident investigation, and integration with downstream audit or
+SIEM workflows.
+
+### 10.11 Metrics and Claims Boundary
+
+The project implements support for precision, recall, F1 score, true positives,
+false positives, false negatives, residual PII count, and structure-retention
+score. However, validated precision, recall, accuracy, and F1 results require a
+labeled ground-truth dataset.
+
+Until such annotations are supplied, the system correctly reports:
+
+```text
+Metrics unavailable — ground truth not provided.
+```
+
+The current demonstrated results are operational security metrics, including
+PII findings, confidence scores, risk tiers, redaction replacements,
+post-redaction residual findings, validation status, and structure retention.
+Confidence scores are detector heuristics and must not be presented as
+statistically validated accuracy.
+
+### Recommended Demonstration Flow
+
+For a project presentation, demonstrate the following sequence:
+
+1. Upload a document containing a name, email, phone number, and employee ID.
+2. Show extracted page, slide, paragraph, or table provenance.
+3. Display the finding type, severity, confidence, method, and explanation.
+4. Show the document-level risk score and risk tier.
+5. Show consistent semantic placeholders in the sanitized output.
+6. Display the independent post-redaction validation result.
+7. Demonstrate a residual-PII or extraction-failure case that is blocked.
+8. Export the JSON audit report or CSV traceability matrix.
+
+---
+
+## 11. Project Structure
 
 ```
 pii-security-gateway/
@@ -218,7 +393,7 @@ pii-security-gateway/
 
 ---
 
-## 11. Installation & Setup
+## 12. Installation & Setup
 
 ### Prerequisites
 - Python 3.11 or higher
@@ -246,7 +421,7 @@ python utils/generate_samples.py
 
 ---
 
-## 12. Running the Application
+## 13. Running the Application
 
 Launch the Streamlit web dashboard:
 ```bash
@@ -270,7 +445,7 @@ The application will launch locally at `http://localhost:8501`.
 
 ---
 
-## 13. Running Automated Tests
+## 14. Running Automated Tests
 
 Run the complete test suite using `pytest`:
 ```bash
@@ -296,7 +471,7 @@ All 20 tests verify:
 
 ---
 
-## 14. Current Limitations
+## 15. Current Limitations
 
 - **OCR Engine:** V1 detects scanned PDF pages (`SCANNED_PAGE_REQUIRES_OCR`) and supports Tesseract when installed locally on the host system PATH. If Tesseract is not installed, it safely flags the page as requiring review without crashing.
 - **Output Re-formatting:** V1 exports sanitized content as structured text retaining original structural headers, page labels, and slide sections. Direct re-compilation into native styled PDF/DOCX binary templates is planned for V2.
@@ -304,7 +479,7 @@ All 20 tests verify:
 
 ---
 
-## 15. Future Enhancements
+## 16. Future Enhancements
 
 - **Native Format Export:** Re-rendering sanitized text back into formatted PDF, DOCX, and PPTX binaries.
 - **Enterprise Vault Tokenization:** Reversible cryptographic tokenization vault for authorized human re-identification.
